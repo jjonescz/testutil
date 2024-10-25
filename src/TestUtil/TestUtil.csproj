@@ -9,6 +9,8 @@
     <!-- NuGet package -->
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/jjonescz/testutil</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jjonescz/testutil</RepositoryUrl>
 
     <!-- dotnet tool -->
     <PackAsTool>true</PackAsTool>
