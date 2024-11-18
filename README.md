@@ -1,7 +1,7 @@
 # testutil
 
-Given a [Roslyn](https://github.com/dotnet/roslyn) PR number,
-finds the set of tests failing in CI for that PR,
+Given a [Roslyn](https://github.com/dotnet/roslyn) PR number (or AzDo build ID),
+finds the set of tests failing in CI for that PR/build,
 and produces a `.playlist` file which can be used in Visual Studio to run just the failing tests.
 
 ## Usage
@@ -9,7 +9,7 @@ and produces a `.playlist` file which can be used in Visual Studio to run just t
 ```ps1
 dotnet tool install -g testutil # install the tool
 dotnet tool update -g testutil # update the tool if already installed
-testutil <Roslyn GitHub PR number> # generated a .playlist file
+testutil <Roslyn GitHub PR number or build ID> # generated a .playlist file
 ```
 
 ## Related work

@@ -5,13 +5,13 @@ using Microsoft.TeamFoundation.Build.WebApi;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
 
-if (args.Length != 1 || !int.TryParse(args[0], out var prNumber) || prNumber < 0)
+if (args.Length != 1 || !int.TryParse(args[0], out var arg) || arg < 0)
 {
-    Console.WriteLine("Usage: testutil <PR number>");
+    Console.WriteLine("Usage: testutil <PR number or build ID>");
     return -1;
 }
 
-Console.WriteLine($"PR number: {prNumber}");
+Console.WriteLine($"PR number: {arg}");
 
 var baseUrl = new Uri("https://dev.azure.com/dnceng-public");
 var project = "public";
@@ -20,15 +20,33 @@ var buildClient = connection.GetClient<BuildHttpClient>();
 var builds = await buildClient.GetBuildsAsync2(
     project: project,
     definitions: [95], // roslyn-CI
-    branchName: $"refs/pull/{prNumber}/merge",
+    branchName: $"refs/pull/{arg}/merge",
     top: 1);
-if (builds.Count < 1)
+Build? build;
+string playlistFileNamePrefix = "";
+if (builds.Count != 0)
+{
+    build = builds[0];
+    playlistFileNamePrefix = $"{arg}-";
+}
+else
 {
     Console.WriteLine("No builds found.");
-    return -1;
+
+    // Try build ID next.
+    Console.WriteLine($"Build ID: {arg}");
+
+    build = await buildClient.GetBuildAsync(
+        project: project,
+        buildId: arg);
+
+    if (build is null)
+    {
+        Console.WriteLine("Build not found.");
+        return -1;
+    }
 }
 
-var build = builds[0];
 Console.WriteLine($"Build number: {build.BuildNumber}");
 
 var artifacts = await buildClient.GetArtifactsAsync(
@@ -38,7 +56,7 @@ var testLogArtifacts = artifacts
     .Select(static a => (Artifact: a, TestLegName: tryGetTestLegName(a.Name)))
     .Where(static t => t.TestLegName is not null);
 
-var playlistFileName = $"{prNumber}-{build.BuildNumber}.playlist";
+var playlistFileName = $"{playlistFileNamePrefix}{build.BuildNumber}.playlist";
 StreamWriter? playlistWriter = null;
 
 var seenTestNames = new HashSet<string>();
