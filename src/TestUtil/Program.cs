@@ -1,6 +1,8 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Build.Framework;
+using Microsoft.Build.Logging;
 using Microsoft.TeamFoundation.Build.WebApi;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
@@ -76,7 +78,7 @@ foreach (var (artifact, testLegName) in testLogArtifacts)
         //.DebugAsync()
         .ReadFromJsonAsync<ArtifactFiles>();
 
-    var logFile = files.Items.FirstOrDefault(static f => f.Path == "/runtests.log");
+    var logFile = files.Items.FirstOrDefault(static f => f.Path == "/helix.binlog");
 
     if (logFile is null)
     {
@@ -84,21 +86,31 @@ foreach (var (artifact, testLegName) in testLogArtifacts)
         continue;
     }
 
-    var logContent = await buildClient.GetFileAsync(
+    using var logStream = await buildClient.GetFileAsync(
         project: project,
         buildId: build.Id,
         artifactName: artifact.Name,
         fileId: logFile.Blob.Id,
-        fileName: logFile.Path)
-        //.DebugAsync()
-        .ReadAsStringAsync();
+        fileName: logFile.Path);
 
-    // Example line: C:\...\Helix.targets(89,5): error : Failure log: https://helix.dot.net/api/.../console [D:\a\1\s\helix-tmp.csproj]
-    foreach (var failureLogMatch in Helpers.FailureLogPattern.Matches(logContent).Cast<Match>())
+    var failureLogUrls = new List<string>();
+    var logReader = new BinaryLogReplayEventSource();
+    logReader.AnyEventRaised += (_, args) =>
     {
-        var failureLogUrl = failureLogMatch.Groups[1].Value;
-        //Console.WriteLine($" Failure log: {failureLogUrl}");
+        // Example message: Work item workitem_0 in job <GUID> has failed.\nFailure log: https://helix.dot.net/api/.../console
+        if (args is BuildErrorEventArgs error &&
+            !string.IsNullOrEmpty(error.Message) &&
+            Helpers.FailureLogPattern.Match(error.Message) is { Success: true } failureLogMatch)
+        {
+            var failureLogUrl = failureLogMatch.Groups[1].Value;
+            failureLogUrls.Add(failureLogUrl);
+            //Console.WriteLine($" Failure log: {failureLogUrl}");
+        }
+    };
+    logReader.Replay(logStream, cancellationToken: default);
 
+    foreach (var failureLogUrl in failureLogUrls)
+    {
         var failureLogContent = await client.GetStringAsync(failureLogUrl.ToString());
 
         // Example line: [xUnit.net 00:00:23.67]     Some.Namespace.Test_Name(theory: "parameters") [FAIL]
@@ -140,7 +152,7 @@ static string? tryGetTestLegName(string artifactName)
 
 static partial class Helpers
 {
-    [GeneratedRegex("""Failure log: (.+) \[""")]
+    [GeneratedRegex("""Failure log: (.+)$""")]
     public static partial Regex FailureLogPattern { get; }
 
     [GeneratedRegex("""^Test_(.+) Attempt (\d+) Logs$""")]
