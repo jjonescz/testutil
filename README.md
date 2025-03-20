@@ -1,5 +1,7 @@
 # testutil
 
+[![NuGet Downloads](https://img.shields.io/nuget/dt/testutil?logo=nuget&label=NuGet)](https://www.nuget.org/packages/testutil)
+
 Given a [Roslyn](https://github.com/dotnet/roslyn) PR number (or AzDo build ID),
 finds the set of tests failing in CI for that PR/build,
 and produces a `.playlist` file which can be used in Visual Studio to run just the failing tests.
@@ -25,5 +27,7 @@ so it's easier to use.
 ## Release process
 
 ```ps1
-dotnet pack -p:PackageVersion=<put-your-version-here>
+$version='<put-your-version-here>'
+dotnet pack -p:PackageVersion=$version
+git tag v$version && git push origin v$version
 ```
