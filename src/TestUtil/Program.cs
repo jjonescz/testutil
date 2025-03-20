@@ -7,10 +7,18 @@ using Microsoft.TeamFoundation.Build.WebApi;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
 
+Console.WriteLine($"Output directory: {Environment.CurrentDirectory}");
+
 if (args.Length != 1 || !int.TryParse(args[0], out var arg) || arg < 0)
 {
-    Console.WriteLine("Usage: testutil <PR number or build ID>");
-    return -1;
+    Console.Write("PR number or build ID: ");
+    if (Console.ReadLine() is not { Length: > 0 } input ||
+        !int.TryParse(input, out arg) ||
+        arg < 0)
+    {
+        Console.WriteLine("Not a valid positive integer.");
+        return -1;
+    }
 }
 
 Console.WriteLine($"PR number: {arg}");
