@@ -29,5 +29,6 @@ so it's easier to use.
 ```ps1
 $version='<put-your-version-here>'
 dotnet pack -p:PackageVersion=$version
+dotnet nuget push src/TestUtil/bin/Release/testutil.$version.nupkg --source https://api.nuget.org/v3/index.json
 git tag v$version && git push origin v$version
 ```
