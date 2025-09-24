@@ -9,19 +9,44 @@ using Microsoft.VisualStudio.Services.WebApi;
 
 Console.WriteLine($"Output directory: {Environment.CurrentDirectory}");
 
-if (args.Length != 1 || !int.TryParse(args[0], out var arg) || arg < 0)
+// Playlist file format docs: https://learn.microsoft.com/en-us/visualstudio/test/run-unit-tests-with-test-explorer?view=vs-2022#create-custom-playlists
+
+int num = -1;
+bool farToPlaylist = false;
+
+bool tryParseArg(string arg)
 {
-    Console.Write("PR number or build ID: ");
+    if (arg == "f")
+    {
+        farToPlaylist = true;
+        return true;
+    }
+
+    if (int.TryParse(arg, out num) && num >= 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+if (args is not [{ } arg] || !tryParseArg(arg))
+{
+    Console.Write("PR number or build ID or 'f' for converting from find-all-references result: ");
     if (Console.ReadLine() is not { Length: > 0 } input ||
-        !int.TryParse(input, out arg) ||
-        arg < 0)
+        !tryParseArg(input))
     {
         Console.WriteLine("Not a valid positive integer.");
         return -1;
     }
 }
 
-Console.WriteLine($"PR number: {arg}");
+if (farToPlaylist)
+{
+    return processFar();
+}
+
+Console.WriteLine($"PR number: {num}");
 
 var baseUrl = new Uri("https://dev.azure.com/dnceng-public");
 var project = "public";
@@ -30,25 +55,25 @@ var buildClient = connection.GetClient<BuildHttpClient>();
 var builds = await buildClient.GetBuildsAsync2(
     project: project,
     definitions: [95], // roslyn-CI
-    branchName: $"refs/pull/{arg}/merge",
+    branchName: $"refs/pull/{num}/merge",
     top: 1);
 Build? build;
 string playlistFileNamePrefix = "";
 if (builds.Count != 0)
 {
     build = builds[0];
-    playlistFileNamePrefix = $"{arg}-";
+    playlistFileNamePrefix = $"{num}-";
 }
 else
 {
     Console.WriteLine("No builds found.");
 
     // Try build ID next.
-    Console.WriteLine($"Build ID: {arg}");
+    Console.WriteLine($"Build ID: {num}");
 
     build = await buildClient.GetBuildAsync(
         project: project,
-        buildId: arg);
+        buildId: num);
 
     if (build is null)
     {
@@ -152,6 +177,34 @@ if (playlistWriter is not null)
 
 return 0;
 
+static int processFar()
+{
+    var playlistFileName = $"far-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.playlist";
+    Console.WriteLine($"Writing playlist file: {playlistFileName}");
+    Console.WriteLine("Paste text output of find-all-references here, then Ctrl-Z or Ctrl-D to end input:");
+    using var playlistWriter = File.CreateText(playlistFileName);
+    playlistWriter.WriteLine("<Playlist Version=\"2.0\"><Rule Match=\"Any\">");
+    var seenFileNames = new HashSet<string>(StringComparer.Ordinal);
+    for (string? line; (line = Console.ReadLine()) != null;)
+    {
+        // Example line:
+        //   D:\roslyn-C\src\Compilers\CSharp\Portable\Binder\Semantics\OverloadResolution\OverloadResolutionResult.cs(1521):return new DiagnosticInfoWithSymbols(ErrorCode.ERR_AmbigCall, [distinguisher.First, distinguisher.Second], symbols);
+        if (Helpers.FileNamePattern.Match(line) is { Success: true } match)
+        {
+            var fileName = match.Groups[1].Value;
+            if (seenFileNames.Add(fileName))
+            {
+                Console.WriteLine($"  File: {fileName}");
+                playlistWriter.WriteLine($"<Property Name=\"Class\" Value=\"{Path.GetFileNameWithoutExtension(fileName)}\" />");
+            }
+        }
+    }
+    playlistWriter.WriteLine("</Rule></Playlist>");
+    playlistWriter.Flush();
+    playlistWriter.Close();
+    return 0;
+}
+
 static string? tryGetTestLegName(string artifactName)
 {
     var match = Helpers.TestArtifactNamePattern.Match(artifactName);
@@ -168,6 +221,9 @@ static partial class Helpers
 
     [GeneratedRegex("""^\[[^]]+\]\s+([^(\r\n]+).* \[FAIL\]\r?$""", RegexOptions.Multiline)]
     public static partial Regex TestNamePattern { get; }
+
+    [GeneratedRegex("""[/\\]([^/\\(]+)\(""")]
+    public static partial Regex FileNamePattern { get; }
 
     public static async Task<Stream> DebugAsync(this Task<Stream> streamTask)
     {
