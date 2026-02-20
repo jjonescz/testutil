@@ -6,7 +6,10 @@
     <NoWarn>$(NoWarn);NU1507</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Build" Version="17.14.8" />
-    <PackageVersion Include="Microsoft.TeamFoundationServer.Client" Version="19.225.1" />
+    <PackageVersion Include="Microsoft.Build" Version="18.3.3" />
+    <PackageVersion Include="Microsoft.TeamFoundationServer.Client" Version="19.225.2" />
+  </ItemGroup>
+  <ItemGroup Label="Pinned Transitive Dependencies">
+    <PackageVersion Include="System.Data.SqlClient" Version="4.9.1" />
   </ItemGroup>
 </Project>
