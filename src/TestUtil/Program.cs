@@ -140,7 +140,15 @@ foreach (var (artifact, testLegName) in testLogArtifacts)
             //Console.WriteLine($" Failure log: {failureLogUrl}");
         }
     };
-    logReader.Replay(logStream, cancellationToken: default);
+
+    try
+    {
+        logReader.Replay(logStream, cancellationToken: default);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  {ex.GetType()}: {ex.Message}");
+    }
 
     foreach (var failureLogUrl in failureLogUrls)
     {
