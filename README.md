@@ -27,8 +27,13 @@ so it's easier to use.
 ## Release process
 
 ```ps1
-$version='<put-your-version-here>'
+$version='<the next version here (without v prefix)>'
 dotnet pack -p:PackageVersion=$version
+
+# authenticate to nuget.org (only needed once)
+winget install microsoft.nuge
+nuget setapikey '<api key here>' -source https://api.nuget.org/v3/index.json
+
 dotnet nuget push src/TestUtil/bin/Release/testutil.$version.nupkg --source https://api.nuget.org/v3/index.json
 git tag v$version && git push origin v$version
 ```
