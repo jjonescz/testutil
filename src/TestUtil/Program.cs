@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Logging;
 using Microsoft.TeamFoundation.Build.WebApi;
@@ -40,6 +41,14 @@ sealed class PlaylistSettings : CommandSettings
     [CommandOption("--paste")]
     public bool Paste { get; init; }
 
+    [Description("Convert a generated .playlist file to xUnit method filters.")]
+    [CommandOption("-x|--xunit-filter <PLAYLIST>")]
+    public string? XUnitFilterPlaylist { get; init; }
+
+    [Description("Convert a generated .playlist file to a VSTest filter.")]
+    [CommandOption("-v|--vstest-filter <PLAYLIST>")]
+    public string? VSTestFilterPlaylist { get; init; }
+
     public override ValidationResult Validate()
     {
         if (Number <= 0)
@@ -55,6 +64,27 @@ sealed class PlaylistSettings : CommandSettings
         if (Number is not null && (FindAllReferences || Clipboard || Paste))
         {
             return ValidationResult.Error("NUMBER cannot be combined with find-all-references options.");
+        }
+
+        if (string.IsNullOrWhiteSpace(XUnitFilterPlaylist) && XUnitFilterPlaylist is not null)
+        {
+            return ValidationResult.Error("--xunit-filter cannot be empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(VSTestFilterPlaylist) && VSTestFilterPlaylist is not null)
+        {
+            return ValidationResult.Error("--vstest-filter cannot be empty.");
+        }
+
+        if (XUnitFilterPlaylist is not null && VSTestFilterPlaylist is not null)
+        {
+            return ValidationResult.Error("Use either --xunit-filter or --vstest-filter, not both.");
+        }
+
+        if ((XUnitFilterPlaylist is not null || VSTestFilterPlaylist is not null) &&
+            (Number is not null || FindAllReferences || Clipboard || Paste || OutputDirectory is not null))
+        {
+            return ValidationResult.Error("Filter conversion cannot be combined with other options or NUMBER.");
         }
 
         if (string.IsNullOrWhiteSpace(OutputDirectory) && OutputDirectory is not null)
@@ -73,6 +103,14 @@ sealed class PlaylistCommand : AsyncCommand<PlaylistSettings>
         PlaylistSettings settings,
         CancellationToken cancellationToken)
     {
+        var inputKind = GetInputKind(settings);
+        if (inputKind is InputKind.XUnitFilter or InputKind.VSTestFilter)
+        {
+            var playlistFileName = settings.XUnitFilterPlaylist ?? settings.VSTestFilterPlaylist ??
+                AnsiConsole.Ask<string>("Playlist file path:");
+            return ConvertPlaylistFilter(playlistFileName, inputKind);
+        }
+
         string outputDirectory;
         try
         {
@@ -87,7 +125,6 @@ sealed class PlaylistCommand : AsyncCommand<PlaylistSettings>
 
         AnsiConsole.WriteLine($"Output directory: {outputDirectory}");
 
-        var inputKind = GetInputKind(settings);
         if (inputKind == InputKind.FindAllReferences)
         {
             var source = GetFindAllReferencesSource(settings);
@@ -100,6 +137,56 @@ sealed class PlaylistCommand : AsyncCommand<PlaylistSettings>
                 .Validate(static value => value > 0));
 
         return await ProcessBuildAsync(outputDirectory, number, cancellationToken);
+    }
+
+    private static int ConvertPlaylistFilter(string playlistFileName, InputKind inputKind)
+    {
+        try
+        {
+            var playlist = XDocument.Load(playlistFileName);
+            var root = playlist.Root;
+            var rules = root?.Elements("Rule").ToArray();
+            if (root?.Name != "Playlist" ||
+                (string?)root.Attribute("Version") != "2.0" ||
+                rules is not [{ } rule] ||
+                (string?)rule.Attribute("Match") != "Any")
+            {
+                AnsiConsole.MarkupLine("[red]The file is not a supported playlist.[/]");
+                return -1;
+            }
+
+            var testNames = rule.Elements("Property")
+                .Where(static property =>
+                    (string?)property.Attribute("Name") == "TestWithNormalizedFullyQualifiedName")
+                .Select(static property => (string?)property.Attribute("Value"))
+                .Where(static value => !string.IsNullOrEmpty(value))
+                .ToArray();
+
+            if (testNames.Length == 0)
+            {
+                AnsiConsole.MarkupLine("[red]The playlist does not contain any supported tests.[/]");
+                return -1;
+            }
+
+            var filter = inputKind switch
+            {
+                InputKind.XUnitFilter => string.Join(
+                    ' ',
+                    testNames.Select(static testName => $"-method \"{testName}\"")),
+                InputKind.VSTestFilter => $"--filter \"{string.Join(
+                    '|',
+                    testNames.Select(static testName => $"FullyQualifiedName={testName}"))}\"",
+                _ => throw new ArgumentOutOfRangeException(nameof(inputKind)),
+            };
+
+            Console.WriteLine(filter);
+            return 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        {
+            AnsiConsole.MarkupLine($"[red]Could not read the playlist:[/] {Markup.Escape(ex.Message)}");
+            return -1;
+        }
     }
 
     private static string GetOutputDirectory(string? option)
@@ -139,6 +226,16 @@ sealed class PlaylistCommand : AsyncCommand<PlaylistSettings>
 
     private static InputKind GetInputKind(PlaylistSettings settings)
     {
+        if (settings.XUnitFilterPlaylist is not null)
+        {
+            return InputKind.XUnitFilter;
+        }
+
+        if (settings.VSTestFilterPlaylist is not null)
+        {
+            return InputKind.VSTestFilter;
+        }
+
         if (settings.Number is not null)
         {
             return InputKind.Number;
@@ -151,14 +248,20 @@ sealed class PlaylistCommand : AsyncCommand<PlaylistSettings>
 
         return AnsiConsole.Prompt(
             new SelectionPrompt<InputKind>()
-                .Title("What should the playlist be created from?")
+                .Title("What would you like to do?")
                 .UseConverter(static value => value switch
                 {
-                    InputKind.Number => "PR number or build ID",
-                    InputKind.FindAllReferences => "Find-all-references output",
+                    InputKind.Number => "Create a playlist from a PR number or build ID",
+                    InputKind.FindAllReferences => "Create a playlist from find-all-references output",
+                    InputKind.XUnitFilter => "Convert a playlist to xUnit method filters",
+                    InputKind.VSTestFilter => "Convert a playlist to a VSTest filter",
                     _ => throw new ArgumentOutOfRangeException(nameof(value)),
                 })
-                .AddChoices(InputKind.Number, InputKind.FindAllReferences));
+                .AddChoices(
+                    InputKind.Number,
+                    InputKind.FindAllReferences,
+                    InputKind.XUnitFilter,
+                    InputKind.VSTestFilter));
     }
 
     private static FindAllReferencesSource GetFindAllReferencesSource(PlaylistSettings settings)
@@ -422,6 +525,8 @@ enum InputKind
 {
     Number,
     FindAllReferences,
+    XUnitFilter,
+    VSTestFilter,
 }
 
 enum FindAllReferencesSource

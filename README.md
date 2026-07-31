@@ -12,7 +12,7 @@ and produces a `.playlist` file which can be used in Visual Studio to run just t
 dotnet tool install -g testutil # install the tool
 dotnet tool update -g testutil # update the tool if already installed
 
-# Interactive: choose the output directory and playlist source.
+# Interactive: choose an operation and provide its inputs.
 testutil
 
 # Generate from a Roslyn GitHub PR number or Azure DevOps build ID.
@@ -23,11 +23,21 @@ testutil --clipboard --output temp
 
 # Paste find-all-references output into the terminal.
 testutil --paste --output C:\playlists
+
+# Convert a generated playlist to xUnit method filters.
+testutil --xunit-filter tests.playlist
+
+# Convert a generated playlist to a VSTest filter.
+testutil --vstest-filter tests.playlist
 ```
 
 `--output` accepts `temp`, `current`, or a directory path. Omit it to choose
 interactively. `--clipboard` and `--paste` imply `--find-all-references`; when
 only `--find-all-references` is provided, the input source is prompted for.
+`--xunit-filter` writes repeated `-method` arguments suitable for the xUnit
+runner to standard output.
+`--vstest-filter` writes a `--filter` argument suitable for `dotnet test` or
+VSTest to standard output.
 
 ## Related work
 
