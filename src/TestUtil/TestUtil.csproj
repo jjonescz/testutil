@@ -26,6 +26,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Build" />
     <PackageReference Include="Microsoft.TeamFoundationServer.Client" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
+    <PackageReference Include="TextCopy" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,9 @@
   <ItemGroup>
     <PackageVersion Include="Microsoft.Build" Version="18.3.3" />
     <PackageVersion Include="Microsoft.TeamFoundationServer.Client" Version="19.225.2" />
+    <PackageVersion Include="Spectre.Console" Version="0.57.2" />
+    <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0" />
+    <PackageVersion Include="TextCopy" Version="6.2.1" />
   </ItemGroup>
   <ItemGroup Label="Pinned Transitive Dependencies">
     <PackageVersion Include="System.Data.SqlClient" Version="4.9.1" />

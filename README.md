@@ -11,8 +11,23 @@ and produces a `.playlist` file which can be used in Visual Studio to run just t
 ```ps1
 dotnet tool install -g testutil # install the tool
 dotnet tool update -g testutil # update the tool if already installed
-testutil <Roslyn GitHub PR number or build ID> # generates a .playlist file
+
+# Interactive: choose the output directory and playlist source.
+testutil
+
+# Generate from a Roslyn GitHub PR number or Azure DevOps build ID.
+testutil <number> --output current
+
+# Generate from find-all-references output on the clipboard.
+testutil --clipboard --output temp
+
+# Paste find-all-references output into the terminal.
+testutil --paste --output C:\playlists
 ```
+
+`--output` accepts `temp`, `current`, or a directory path. Omit it to choose
+interactively. `--clipboard` and `--paste` imply `--find-all-references`; when
+only `--find-all-references` is provided, the input source is prompted for.
 
 ## Related work
 
